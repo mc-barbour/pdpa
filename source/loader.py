@@ -45,3 +45,48 @@ def load_experiment(name, data_dir):
         return Run(name, experiment_log.loc[name], data_dir)
     else:
         raise ValueError("No experiment found with name {:s}. Check spelling and paths in experiment.py".format(name))
+        
+def load_raw_data(name, data_dir):
+    
+    experiment_log_filename = data_dir + 'experiment_log.xlsx'
+    
+    if os.path.exists(experiment_log_filename):
+        experiment_log = pd.read_excel(data_dir + 'experiment_log.xlsx', index_col='Name')
+    
+    else:
+        raise Exception("Error: No experimental log found in director: ", data_dir)
+        
+        
+    if name in experiment_log.index.values:
+        print(experiment_log.loc[name])
+        return Run(name, experiment_log.loc[name], data_dir + 'raw_data/')
+    else:
+        raise ValueError("No experiment found with name {:s}. Check spelling and paths in experiment.py".format(name))
+        
+        
+        
+def load_processed_data(name, data_dir):
+    
+    experiment_log_filename = data_dir + 'experiment_log.xlsx'
+    
+    if os.path.exists(experiment_log_filename):
+        experiment_log = pd.read_excel(data_dir + 'experiment_log.xlsx', index_col='Name')
+    
+    else:
+        raise Exception("Error: No experimental log found in director: ", data_dir)
+        
+        
+    if name in experiment_log.index.values:
+        print(experiment_log.loc[name])
+        return Run(name, experiment_log.loc[name], data_dir + 'valid_data/', raw_bool=False)
+    else:
+        raise ValueError("No experiment found with name {:s}. Check spelling and paths in experiment.py".format(name))
+        
+        
+                
+        
+        
+        
+        
+        
+        

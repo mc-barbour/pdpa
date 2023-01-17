@@ -21,16 +21,20 @@ pio.renderers.default = "browser"
 class Run():
     
     
-    def __init__(self, name, params, data_dir):
+    def __init__(self, name, params, data_dir, raw_bool=True):
         
         self._name = name
         self._path = data_dir + params['Data folder name']
+        self.data_dir = data_dir
+        self.raw_bool = raw_bool
+        
         self.tidal_volume = params['Tidal volume (mL)']
         self.inspiratory_period = params["Inspiration period (s)"]
         self.measurement_distance = params['Centerline distance (mm)']
         self.droplet_diameter_scale = 0.467
         self.minintensity = params['minintensity']
         self.maxdiamdiff = params['maxdiamdiff']
+        self.maxdiameter = params['maxdiameter']
         self.a1 = params['a1']
         self.c1 = params['c1']
         self.ratio = params['ratio']
@@ -40,14 +44,27 @@ class Run():
         
         self.load_pdpa_data()
         
+        self.centerline_distance = params['Centerline distance (mm)']
+        self.radial_position = params['Radial position (mm)']
+        
     def load_pdpa_data(self):
         
-        data = pd.read_csv(self._path, delimiter=',', skiprows=1)
+        if self.raw_bool:
+            data = pd.read_csv(self._path, delimiter=',', skiprows=1)
+        else:
+            data = pd.read_csv(self._path, delimiter=',', skiprows=0)
+            self.valid = data[' "Validity"'].values
         
-        # self.time_chan1 = data['Time Ch. 1 (sec)']
-        # self.time_chan2 = data[' "Time Ch. 2 (sec)"']
-        self.velocity_chan1 = np.array(data[' "Velocity Ch. 1 (m/sec)"'].values * -1)
-        # self.velocity_chan2 = np.array(data[' "Velocity Ch. 2 (m/sec)"'])
+        if ' "Scaled Diameter"' in data.columns:
+            print('Loading scaled diameters')
+            self.scaled_diameter = data[' "Scaled Diameter"'].values
+        
+        self.time_chan1 = data['Time Ch. 1 (sec)'].values
+        self.time_chan2 = data[' "Time Ch. 2 (sec)"'].values
+        self.gate_time = data[' "Gate Time Ch. 1 (usec)"'].values
+        
+        self.velocity_chan1 = np.array(data[' "Velocity Ch. 1 (m/sec)"'].values)
+        self.velocity_chan2 = np.array(data[' "Velocity Ch. 2 (m/sec)"'])
         self.intensity = np.array(data[' "Intensity (mV)"'])
         self.diameter_diff = np.array(data[' "Diameter Dif (um)"'])
         
@@ -61,13 +78,13 @@ class Run():
         
     def scale_diameter(self):
         print("Scaling diameters by a factor of:", self.droplet_diameter_scale)
-        self.diameter = self.diameter * self.droplet_diameter_scale
+        self.scaled_diameter = self.diameter * self.droplet_diameter_scale
     
     def estimate_flowrate(self):
         self.estimated_flowrate = self.tidal_volume / self.inspiratory_period * 60 / 1000
         
         
-    def filter_diameters(self, filter_curves=True):
+    def filter_diameters(self, filter_curves=True, max_diameter=True):
         
         # remove nans
         valid0 = ~np.isnan(self.diameter)
@@ -97,22 +114,27 @@ class Run():
             fig.add_trace(go.Scatter(x=x, y=y1, name='Curve 1', marker_color='black', line_dash='dash'))
             fig.add_trace(go.Scatter(x=x, y=y2, name='Curve 2',marker_color='black', line_dash='dash'))
             fig.update_yaxes(title='Intensity', range=[self.c2,max(self.intensity)])
-            fig.update_layout(title="{:s}; a1={:0.2f}; c1={:0.2f}; ratio={:0.2f}; c2={:0.2f}".format(self._name, self.a1, self.c1, self.ratio, self.c2))
+            fig.update_layout(title="{:s}; a1={:0.3f}; c1={:0.3f}; ratio={:0.3f}; c2={:0.2f}".format(self._name, self.a1, self.c1, self.ratio, self.c2))
             
             # add a save image
             
             fig.show()
+        if max_diameter:
+            valid2 = (self.diameter < self.maxdiameter)
+            valid_final = (valid1 & valid0 & valid2) == True
+        else:
+            valid_final = (valid1 & valid0) == True
             
-        valid_final = (valid1 & valid0) == True
         idx_valid = np.nonzero(valid_final)[0]
         
         percent_valid = 100*len(idx_valid)/len(self.diameter)
         print("{:2.2f} % valid particles".format(percent_valid))
         
-        
-        self.diameter = self.diameter[valid_final]
-        self.velocity_chan1 = self.velocity_chan1[valid_final]
-        self.intensity = self.intensity[valid_final]
+        self.valid = valid_final * 1 #convert from boolean to [0,1]
+        print(valid_final)
+        # self.diameter = self.diameter[valid_final]
+        # self.velocity_chan1 = self.velocity_chan1[valid_final]
+        # self.intensity = self.intensity[valid_final]
         
         
         print(len(self.diameter))
@@ -123,6 +145,37 @@ class Run():
         self.diameter = np.delete(self.diameter, zero_intensity_values)
         self.velocity_chan1 = np.delete(self.velocity_chan1, zero_intensity_values)
         self.intensity = np.delete(self.intensity, zero_intensity_values)
+        
+    def filter_maxdiameter(self):
+        valid = (self.diameter < self.maxdiameter)
+        idx_valid = np.nonzero(valid)[0]
+        # if valid in dir(self):
+        #     self.valid.append(valid)
+        
+        percent_valid = 100*len(idx_valid)/len(self.diameter)
+        print("{:2.2f} % valid particles".format(percent_valid))
+        self.valid = valid*1
+        
+    def save_filtered_run(self):
+       
+        data = pd.read_csv(self._path, delimiter=',', skiprows=1)
+        
+        diameter = data[' "Diameter (um)"'].values
+        self.diameter = np.array([float(x) if x!=' Fillin' else np.NaN for x in diameter])
+        
+        data[' "Diameter (um)"'] = self.diameter
+        data[' "Validity"'] = self.valid 
+        data[' "Scaled Diameter"'] = self.scaled_diameter
+        
+        process_data_dir = self.data_dir + "../valid_data/"
+        filename = self._path.split("/")[-1]
+        
+        print("Saving valid particles to: ", process_data_dir + filename)
+        
+        data.to_csv(process_data_dir + filename)
+        
+        
+        
         
         
         
