@@ -84,7 +84,7 @@ class Run():
         self.estimated_flowrate = self.tidal_volume / self.inspiratory_period * 60 / 1000
         
         
-    def filter_diameters(self, filter_curves=True, max_diameter=True):
+    def filter_diameters(self, filter_curves=True, max_diameter=True, show_plot=True):
         
         # remove nans
         valid0 = ~np.isnan(self.diameter)
@@ -103,22 +103,22 @@ class Run():
             print(len(i1), len(i2), len(self.intensity))
             not_valid = valid1==False
             
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=self.diameter[valid1], y=self.intensity[valid1],
-                                     mode='markers', marker_color='blue',
-                                     name='valid'))
-            fig.add_trace(go.Scatter(x=self.diameter[not_valid], y=self.intensity[not_valid],
-                                     mode='markers', marker_color='red',
-                                     name='not valid'))
-            fig.add_trace(go.Scatter(x=x, y=y1, name='Curve 1', marker_color='black', line_dash='dash'))
-            fig.add_trace(go.Scatter(x=x, y=y2, name='Curve 2',marker_color='black', line_dash='dash'))
-            fig.update_yaxes(title='Intensity', range=[self.c2,max(self.intensity)])
-            fig.update_layout(title="{:s}; a1={:0.3f}; c1={:0.3f}; ratio={:0.3f}; c2={:0.2f}".format(self._name, self.a1, self.c1, self.ratio, self.c2))
-            
-            # add a save image
-            
-            fig.show()
+            if show_plot:
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=self.diameter[valid1], y=self.intensity[valid1],
+                                         mode='markers', marker_color='blue',
+                                         name='valid'))
+                fig.add_trace(go.Scatter(x=self.diameter[not_valid], y=self.intensity[not_valid],
+                                         mode='markers', marker_color='red',
+                                         name='not valid'))
+                fig.add_trace(go.Scatter(x=x, y=y1, name='Curve 1', marker_color='black', line_dash='dash'))
+                fig.add_trace(go.Scatter(x=x, y=y2, name='Curve 2',marker_color='black', line_dash='dash'))
+                fig.update_yaxes(title='Intensity', range=[self.c2,max(self.intensity)])
+                fig.update_layout(title="{:s}; a1={:0.3f}; c1={:0.3f}; ratio={:0.3f}; c2={:0.2f}".format(self._name, self.a1, self.c1, self.ratio, self.c2))
+                
+                # add a save image
+                
+                fig.show()
         if max_diameter:
             valid2 = (self.diameter < self.maxdiameter)
             valid_final = (valid1 & valid0 & valid2) == True
@@ -164,9 +164,13 @@ class Run():
         self.diameter = np.array([float(x) if x!=' Fillin' else np.NaN for x in diameter])
         
         data[' "Diameter (um)"'] = self.diameter
-        data[' "Validity"'] = self.valid 
-        data[' "Scaled Diameter"'] = self.scaled_diameter
+        data[' "Validity"'] = self.valid
         
+        if hasattr(self, 'scaled_diameter'):
+            data[' "Scaled Diameter"'] = self.scaled_diameter
+        else:
+            print("No scaled diameter to save")
+            
         process_data_dir = self.data_dir + "../valid_data/"
         filename = self._path.split("/")[-1]
         
